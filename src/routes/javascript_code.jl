@@ -1275,44 +1275,6 @@ let particleTrajectories = [];
 let currentParticleTime = 0;
 let particleAnimation = null;
 
-// Загрузка данных частиц
-async function loadAndShowParticles() {
-    console.log('🌀 Загрузка данных частиц...');
-    
-    const date = document.getElementById('dateSelect').value;
-    const region = document.getElementById('regionSelect').value;
-    const depthIndex = document.getElementById('particle-depth').value || '0';
-    const particleCount = document.getElementById('particle-density').value || '1000';
-    
-    try {
-        const params = new URLSearchParams({
-            date: date,
-            depth_index: depthIndex,
-            forecast_range: '240',
-            region: region,
-            particle_count: particleCount
-        });
-        
-        const response = await fetch('/api/particles/trajectories?' + params.toString());
-        const data = await response.json();
-        
-        if (data.success && data.trajectories) {
-            particleTrajectories = data.trajectories;
-            console.log(\`✅ Загружено ` + particleTrajectories.length траекторий\`);
-            
-            // Показываем частицы
-            showParticles();
-            startParticleAnimation();
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        // Тестовые данные
-        createTestParticles();
-        showParticles();
-        startParticleAnimation();
-    }
-}
-
 // Тестовые частицы
 function createTestParticles() {
     particleTrajectories = [];
@@ -1492,47 +1454,6 @@ let currentParticleTime = 0;
 let particleAnimation = null;
 let isParticlesVisible = false;
 
-// Загрузка данных частиц
-async function loadAndShowParticles() {
-    console.log('🌀 Загрузка данных частиц...');
-    
-    // Получаем параметры
-    const date = document.getElementById('dateSelect').value;
-    const region = document.getElementById('regionSelect').value;
-    const depthIndex = document.getElementById('particle-depth').value || '0';
-    const particleCount = document.getElementById('particle-density').value || '1000';
-    
-    try {
-        const params = new URLSearchParams({
-            date: date,
-            depth_index: depthIndex,
-            forecast_range: '240',
-            region: region,
-            particle_count: particleCount
-        });
-        
-        const response = await fetch('/api/particles/trajectories?' + params.toString());
-        const data = await response.json();
-        
-        if (data.success && data.trajectories) {
-            particleTrajectories = data.trajectories;
-            console.log(\`✅ Загружено \+ particleTrajectories.length траекторий\`);
-            
-            // Показываем частицы
-            showParticles();
-            startParticleAnimation();
-        } else {
-            console.error('Ошибка загрузки траекторий:', data.error);
-            alert('Не удалось загрузить траектории частиц');
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        // Покажем тестовые данные
-        createTestParticles();
-        showParticles();
-        startParticleAnimation();
-    }
-}
 
 // Создание тестовых частиц (если API не работает)
 function createTestParticles() {
@@ -1751,49 +1672,6 @@ function geographicToPixel(lon, lat, canvas) {
             x: canvas.width / 2 + lon * (canvas.width / 720),
             y: canvas.height / 2 - lat * (canvas.height / 360)
         };
-    }
-}
-
-// Загрузка данных
-async function loadAndShowParticles() {
-    console.log('🌀 Загрузка траекторий...');
-    
-    try {
-        const date = document.getElementById('dateSelect').value;
-        const region = document.getElementById('regionSelect').value;
-        const depthIndex = document.getElementById('particle-depth').value || '0';
-        const particleCount = document.getElementById('particle-density').value || '1000';
-        
-        const params = new URLSearchParams({
-            date: date,
-            depth_index: depthIndex,
-            forecast_range: '240',
-            region: region,
-            particle_count: particleCount
-        });
-        
-        const response = await fetch('/api/particles/trajectories?' + params.toString());
-        const data = await response.json();
-        
-        if (data.success && data.trajectories) {
-            particleTrajectories = data.trajectories;
-            console.log('✅ Загружено траекторий: ' + particleTrajectories.length);
-            showParticles();
-            startParticleAnimation();
-        }
-    } catch (error) {
-        console.error('Ошибка:', error);
-        // Тестовые данные
-        particleTrajectories = [];
-        for (let i = 0; i < 20; i++) {
-            const points = [];
-            for (let t = 0; t < 11; t++) {
-                points.push([Math.random() * 360 - 180, Math.random() * 170 - 85, 0.3]);
-            }
-            particleTrajectories.push({id: i, points: points});
-        }
-        showParticles();
-        startParticleAnimation();
     }
 }
 
