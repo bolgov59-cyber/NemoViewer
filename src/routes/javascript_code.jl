@@ -782,6 +782,7 @@ initParticleControls();
 console.log("=== УПРОЩЕННЫЙ ИНТЕРФЕЙС РАЗРЕЗОВ ИНИЦИАЛИЗИРОВАН ===");
 """
 
+const PARTICLE_ANIMATION_FUNCTIONS = """
 // ================== АНИМАЦИЯ ЧАСТИЦ ==================
 let particleSystem = null;
 let isParticlesActive = false;
@@ -882,7 +883,7 @@ async function loadAndShowParticles() {
         });
         
         if (!velocityResponse.ok) {
-            throw new Error(`Ошибка скорости: ${velocityResponse.status}`);
+            throw new Error(`Ошибка скорости: ' + velocityResponse.status`);
         }
         
         const velocityData = await velocityResponse.json();
@@ -933,7 +934,7 @@ class SimpleParticleSystem {
         this.particles = seedParticles.map(p => ({
             x: p.lon,
             y: p.lat,
-            color: `rgba(100, 150, 255, ${0.5 + Math.random() * 0.5})`,
+            color: `rgba(100, 150, 255,  + 0.5 + Math.random() * 0.5)`,
             size: 2 + Math.random() * 3
         }));
         
@@ -1296,7 +1297,7 @@ async function loadAndShowParticles() {
         
         if (data.success && data.trajectories) {
             particleTrajectories = data.trajectories;
-            console.log(\`✅ Загружено \${particleTrajectories.length} траекторий\`);
+            console.log(\`✅ Загружено \ + particleTrajectories.length траекторий\`);
             
             // Показываем частицы
             showParticles();
@@ -1389,7 +1390,7 @@ function drawParticlesAtTime(timeIndex) {
             // Точка
             ctx.beginPath();
             ctx.arc(coords.x, coords.y, radius, 0, Math.PI * 2);
-            ctx.fillStyle = \`hsla(\${hue}, 100%, 60%, 0.8)\`;
+            ctx.fillStyle = \`hsla(\ + hue, 100%, 60%, 0.8)\`;
             ctx.fill();
             
             // Линия до предыдущей позиции
@@ -1400,7 +1401,7 @@ function drawParticlesAtTime(timeIndex) {
                 ctx.beginPath();
                 ctx.moveTo(prevCoords.x, prevCoords.y);
                 ctx.lineTo(coords.x, coords.y);
-                ctx.strokeStyle = \`hsla(\${hue}, 100%, 50%, 0.3)\`;
+                ctx.strokeStyle = \`hsla(\ + hue, 100%, 50%, 0.3)\`;
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
@@ -1416,7 +1417,7 @@ function updateTimeDisplay(timeIndex) {
     const hours = timeIndex * 24;
     const display = document.getElementById('particleTimeDisplay');
     if (display) {
-        display.textContent = \`Время: \${hours}ч (\${timeIndex}/10)\`;
+        display.textContent = \`Время: \ + hours}ч (\ + timeIndex/10)\`;
     }
 }
 
@@ -1514,7 +1515,7 @@ async function loadAndShowParticles() {
         
         if (data.success && data.trajectories) {
             particleTrajectories = data.trajectories;
-            console.log(\`✅ Загружено \${particleTrajectories.length} траекторий\`);
+            console.log(\`✅ Загружено \+ particleTrajectories.length траекторий\`);
             
             // Показываем частицы
             showParticles();
@@ -1639,11 +1640,11 @@ function drawParticlesAtTime(timeIndex) {
             // Рисуем точку
             ctx.beginPath();
             ctx.arc(coords.x, coords.y, radius, 0, Math.PI * 2);
-            ctx.fillStyle = \`hsla(\${hue}, 100%, 60%, 0.8)\`;
+            ctx.fillStyle = \`hsla(\ + hue, 100%, 60%, 0.8)\`;
             ctx.fill();
             
             // Рисуем обводку
-            ctx.strokeStyle = \`hsla(\${hue}, 100%, 40%, 0.6)\`;
+            ctx.strokeStyle = \`hsla(\ + hue, 100%, 40%, 0.6)\`;
             ctx.lineWidth = 1;
             ctx.stroke();
             
@@ -1656,7 +1657,7 @@ function drawParticlesAtTime(timeIndex) {
                         ctx.beginPath();
                         ctx.moveTo(prevCoords.x, prevCoords.y);
                         ctx.lineTo(coords.x, coords.y);
-                        ctx.strokeStyle = \`hsla(\${hue}, 100%, 50%, 0.3)\`;
+                        ctx.strokeStyle = \`hsla(\ + hue, 100%, 50%, 0.3)\`;
                         ctx.lineWidth = 1;
                         ctx.stroke();
                     }
@@ -1694,7 +1695,7 @@ function updateTimeDisplay(timeIndex) {
     const hours = timeIndex * 24;
     const display = document.getElementById('particleTimeDisplay');
     if (display) {
-        display.textContent = \`Время: \${hours}ч (\${timeIndex}/10)\`;
+        display.textContent = \`Время: \ + hours}ч (\ + timeIndex/10)\`;
     }
 }
 
@@ -1895,6 +1896,6 @@ const ALL_JAVASCRIPT = MAP_FUNCTIONS * MODAL_FUNCTIONS * COORDINATE_FUNCTIONS *
                       COORDINATE_TRACKING * DATA_POPUP_FUNCTIONS * GRAPH_FUNCTIONS * 
                       CLIMATOLOGY_GRAPH_FUNCTIONS * GRAPH_UPDATE_FUNCTIONS * CANVAS_FUNCTIONS * SIMPLIFIED_SECTION_FUNCTIONS * 
                       MAP_CLICK_HANDLER * SECTION_PLOT_MODAL_FUNCTION * GLOBAL_VARIABLES * 
-                      UPDATED_INITIALIZATION_CODE * PARTICLE_FUNCTIONS * PARTICLE_INIT_CODE * PARTICLE_FUNCTIONS_FIXED     
+                      UPDATED_INITIALIZATION_CODE * PARTICLE_FUNCTIONS * PARTICLE_INIT_CODE * PARTICLE_FUNCTIONS_FIXED * PARTICLE_ANIMATION_FUNCTIONS    
                       
 end
