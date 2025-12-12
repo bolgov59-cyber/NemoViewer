@@ -1,0 +1,18 @@
+<div id='particleModal' style='display:none;position:fixed;z-index:10003;left:50%;top:50%;transform:translate(-50%,-50%);width:300px;background:white;padding:20px;border-radius:8px;box-shadow:0 5px 25px rgba(0,0,0,0.3);text-align:center'>
+<h3>🌀 Траектории частиц</h3>
+<div style='margin:15px 0;padding:10px;background:#f8f9fa'>
+<div id='particleTimeDisplay'>Время: 0ч</div>
+</div>
+<button onclick='window.setParticleTime(0)'>0ч</button>
+<button onclick='window.setParticleTime(5)'>5д</button>
+<button onclick='window.setParticleTime(10)'>10д</button>
+<br>
+<button onclick='window.startParticleAnimation()'>▶️</button>
+<button onclick='window.stopParticleAnimation()'>⏸️</button>
+<br>
+<label>Плотность: <span id='particle-density-value'>1000</span></label>
+<input type='range' id='particle-density' min='100' max='5000' value='1000' style='width:100%' oninput='document.getElementById("particle-density-value").textContent=this.value'>
+<br>
+<button onclick='window.hideParticles()'>Скрыть</button>
+<button onclick='window.loadAndShowParticles()'>Обновить</button>
+</div>
