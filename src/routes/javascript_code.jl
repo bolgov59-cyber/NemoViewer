@@ -693,7 +693,6 @@ function showSectionPlotModal(htmlContent) {
 }
 """
 
-# Добавьте эту константу ПЕРЕД GLOBAL_VARIABLES
 const GRAPH_UPDATE_FUNCTIONS = """
 // ================== ОБНОВЛЕНИЕ ГРАФИКА С КЛИМАТОЛОГИЕЙ ==================
 let currentGraphType = '';
@@ -778,9 +777,239 @@ const UPDATED_INITIALIZATION_CODE = """
 // ================== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ==================
 setupSectionControls();  // Инициализируем управление разрезами
 loadMap();  // Загружаем начальную карту
+initParticleControls();
 
 console.log("=== УПРОЩЕННЫЙ ИНТЕРФЕЙС РАЗРЕЗОВ ИНИЦИАЛИЗИРОВАН ===");
 """
+
+// ================== АНИМАЦИЯ ЧАСТИЦ ==================
+let particleSystem = null;
+let isParticlesActive = false;
+
+function initParticleControls() {
+    // Привязка событий слайдеров
+    const countSlider = document.getElementById('particleCountSlider');
+    const speedSlider = document.getElementById('particleSpeedSlider');
+    
+    if (countSlider) {
+        countSlider.oninput = function() {
+            document.getElementById('particleCountValue').textContent = this.value;
+        };
+    }
+    
+    if (speedSlider) {
+        speedSlider.oninput = function() {
+            document.getElementById('particleSpeedValue').textContent = this.value;
+        };
+    }
+    
+    // Привязка кнопок
+    const startBtn = document.getElementById('startParticlesBtn');
+    const stopBtn = document.getElementById('stopParticlesBtn');
+    const updateBtn = document.getElementById('updateParticlesBtn');
+    
+    if (startBtn) startBtn.onclick = startParticleAnimation;
+    if (stopBtn) stopBtn.onclick = stopParticleAnimation;
+    if (updateBtn) updateBtn.onclick = updateParticleAnimation;
+    
+    console.log("✅ Инициализированы контролы частиц");
+}
+
+function startParticleAnimation() {
+    console.log("▶️ Запуск анимации частиц");
+    
+    // Показываем canvas и контролы
+    const canvas = document.getElementById('particleCanvas');
+    const controls = document.getElementById('particleControls');
+    
+    if (canvas) canvas.style.display = 'block';
+    if (controls) controls.style.display = 'block';
+    
+    isParticlesActive = true;
+    
+    // Загружаем данные и запускаем анимацию
+    loadAndShowParticles();
+}
+
+function stopParticleAnimation() {
+    console.log("⏹️ Остановка анимации частиц");
+    
+    const canvas = document.getElementById('particleCanvas');
+    const controls = document.getElementById('particleControls');
+    
+    if (canvas) canvas.style.display = 'none';
+    if (controls) controls.style.display = 'none';
+    
+    isParticlesActive = false;
+    
+    // Останавливаем систему частиц
+    if (particleSystem) {
+        particleSystem.stop();
+        particleSystem = null;
+    }
+}
+
+function updateParticleAnimation() {
+    console.log("🔁 Обновление частиц");
+    
+    if (isParticlesActive) {
+        loadAndShowParticles();
+    }
+}
+
+// Основная функция загрузки данных
+async function loadAndShowParticles() {
+    try {
+        console.log("🔄 Загрузка данных частиц...");
+        
+        // Получаем текущие параметры из интерфейса
+        const region = document.getElementById('regionSelect').value;
+        const depth = document.getElementById('depthSelect').value;
+        const date = document.getElementById('dateSelect').value;
+        const forecast = document.getElementById('forecastSelect').value;
+        const count = document.getElementById('particleCountSlider').value;  // ← ЭТОТ элемент должен существовать!
+        
+        // 1. Запрашиваем поле скоростей
+        const velocityResponse = await fetch('/api/particles/velocity-field', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                date: date,
+                depth: depth,
+                forecast_hour: parseInt(forecast),
+                region: region
+            })
+        });
+        
+        if (!velocityResponse.ok) {
+            throw new Error(`Ошибка скорости: ${velocityResponse.status}`);
+        }
+        
+        const velocityData = await velocityResponse.json();
+        console.log("✅ Данные скорости:", velocityData);
+        
+        // 2. Запрашиваем частицы
+        const particlesResponse = await fetch('/api/particles/generate-seeds', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                count: parseInt(count),
+                region: region
+            })
+        });
+        
+        const particlesData = await particlesResponse.json();
+        console.log("✅ Сгенерировано частиц:", particlesData.count);
+        
+        // 3. Инициализируем/обновляем систему частиц
+        if (!particleSystem) {
+            particleSystem = new SimpleParticleSystem('particleCanvas');
+        }
+        
+        particleSystem.initialize(velocityData.data, particlesData.particles);
+        particleSystem.start();
+        
+    } catch (error) {
+        console.error("❌ Ошибка загрузки частиц:", error);
+        alert("Ошибка загрузки данных частиц: " + error.message);
+    }
+}
+
+// Простая система частиц (Canvas2D)
+class SimpleParticleSystem {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.particles = [];
+        this.velocityField = null;
+        this.animationId = null;
+    }
+    
+    initialize(velocityData, seedParticles) {
+        // Сохраняем поле скоростей
+        this.velocityField = velocityData;
+        
+        // Инициализируем частицы
+        this.particles = seedParticles.map(p => ({
+            x: p.lon,
+            y: p.lat,
+            color: `rgba(100, 150, 255, ${0.5 + Math.random() * 0.5})`,
+            size: 2 + Math.random() * 3
+        }));
+        
+        // Подгоняем размер canvas под карту
+        this.resizeCanvas();
+    }
+    
+    resizeCanvas() {
+        const modalImg = document.getElementById('modalImg');
+        if (modalImg) {
+            this.canvas.width = modalImg.clientWidth;
+            this.canvas.height = modalImg.clientHeight;
+        }
+    }
+    
+    start() {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+        }
+        this.animate();
+    }
+    
+    stop() {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    
+    animate() {
+        // Очистка (полупрозрачная для эффекта шлейфа)
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Обновление и отрисовка частиц
+        this.updateParticles();
+        this.drawParticles();
+        
+        this.animationId = requestAnimationFrame(() => this.animate());
+    }
+    
+    updateParticles() {
+        // Простое движение (заглушка - нужна реальная интерполяция)
+        for (const p of this.particles) {
+            p.x += (Math.random() - 0.5) * 0.1;
+            p.y += (Math.random() - 0.5) * 0.1;
+        }
+    }
+    
+    drawParticles() {
+        for (const p of this.particles) {
+            // Преобразование geo -> canvas координаты
+            const canvasPos = this.geoToCanvas(p.x, p.y);
+            
+            this.ctx.beginPath();
+            this.ctx.arc(canvasPos.x, canvasPos.y, p.size, 0, Math.PI * 2);
+            this.ctx.fillStyle = p.color;
+            this.ctx.fill();
+        }
+    }
+    
+    geoToCanvas(lon, lat) {
+        // Упрощенное преобразование (позже заменим на ваше getLonLat в обратную сторону)
+        const rect = this.canvas.getBoundingClientRect();
+        return {
+            x: ((lon + 180) / 360) * rect.width,
+            y: ((90 - lat) / 180) * rect.height
+        };
+    }
+}
+
+// Добавить в глобальные переменные
+window.startParticleAnimation = startParticleAnimation;
+window.stopParticleAnimation = stopParticleAnimation;
+window.updateParticleAnimation = updateParticleAnimation;
 
 # Глобальные переменные и инициализация
 const GLOBAL_VARIABLES = """
