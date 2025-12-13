@@ -4,6 +4,7 @@ using Plots
 using Base64: base64encode
 using Main: LATEST_DATE, APP_CONFIG
 using ..DatabaseFunctions: find_nearest_point, extract_forecast_data, get_climatology_profiles
+using ..ParticleEngine: get_velocity_field, generate_particle_seeds, parse_depth_string
 using LibPQ
 import Genie.Requests: rawpayload
 using Dates
@@ -330,6 +331,84 @@ route("/api/plot_ts", method = POST) do
     catch e
         return "<div style='color: red; padding: 20px;'>Ошибка построения TS-профиля: $(e)</div>"
     end
+end
+
+# ================== API ДЛЯ АНИМАЦИИ ЧАСТИЦ ==================
+
+# Импорт модуля частиц (добавить в начало файла с другими импортами)
+# using ..ParticleEngine: get_velocity_field, generate_particle_seeds, parse_depth_string
+
+route("/api/particles/velocity-field", method=POST) do
+    try
+        data = JSON.parse(rawpayload())
+        
+        date = Date(get(data, "date", string(LATEST_DATE)))
+        forecast_hour = get(data, "forecast_hour", 0)
+        depth_str = get(data, "depth", "0p5")
+        
+        # Преобразуем глубину
+        depth_val = ParticleEngine.parse_depth_string(depth_str)
+        
+        # Индекс времени: 1=анализ, 2=+24ч, 3=+48ч, ...
+        forecast_idx = forecast_hour ÷ 24 + 1
+        
+        # Загружаем сетку (БЕЗ bbox!)
+        grid_data = ParticleEngine.get_velocity_grid(date, depth_val, forecast_idx)
+        
+        if grid_data === nothing
+            return Json.json(Dict(
+                "success" => false,
+                "error" => "Не удалось загрузить сетку скоростей"
+            ))
+        end
+        
+        # Возвращаем данные + метаданные
+        response = Dict(
+            "success" => true,
+            "data" => Dict(
+                "lons" => grid_data.lons,
+                "lats" => grid_data.lats,
+                "u" => grid_data.u,
+                "v" => grid_data.v
+            ),
+            "metadata" => grid_data.metadata
+        )
+        
+        return Json.json(response)
+        
+    catch e
+        println("❌ Ошибка /api/particles/velocity-field: ", e)
+        return Json.json(Dict("success" => false, "error" => "Внутренняя ошибка сервера"))
+    end
+end
+
+
+route("/api/particles/generate-seeds", method=POST) do
+    try
+        data = JSON.parse(rawpayload())
+        count = get(data, "count", 1000)
+        
+        particles = ParticleEngine.generate_particle_seeds(count)
+        
+        return Json.json(Dict(
+            "success" => true,
+            "particles" => particles,
+            "count" => length(particles)
+        ))
+        
+    catch e
+        println("❌ Ошибка /api/particles/generate-seeds: ", e)
+        return Json.json(Dict("success" => false, "error" => "Ошибка генерации частиц"))
+    end
+end
+
+# Простой эндпоинт для проверки работы
+route("/api/particles/test", method=GET) do
+    return Json.json(Dict(
+        "status" => "ready",
+        "module" => "particle_engine",
+        "available_functions" => ["velocity-field", "generate-seeds"]
+    ))
 end
 
 # ================== ФУНКЦИИ ДЛЯ ПОСТРОЕНИЯ РАЗРЕЗА ==================
