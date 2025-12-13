@@ -1,101 +1,169 @@
-# src/utils/particle_engine.jl
 module ParticleEngine
 
 using Dates, JSON3, LinearAlgebra
 using LibPQ
-using ..DatabaseFunctions: get_connection
+using Main.DatabaseFunctions: get_connection, get_latest_date
 
-export get_velocity_field, generate_particle_seeds, parse_depth_string
+export get_velocity_grid, generate_particle_seeds, parse_depth_string
+
+# Кэш для сеток (date, depth, forecast_idx) -> сетка
+const VELOCITY_CACHE = Dict{Tuple{Date,Float64,Int},Any}()
 
 """
-    get_velocity_field(date::Date, depth::Float64, forecast_hour::Int, bbox)
+    get_velocity_grid(date::Date, depth_val::Float64, forecast_idx::Int)
 
-Оптимизированный PostGIS-запрос. Возвращает (lons, lats, u, v) для области bbox.
+Загружает ВСЮ сетку NEMO для заданной даты, глубины и времени прогноза.
+Использует кэширование.
 """
-function get_velocity_field(date::Date, depth_val::Float64, forecast_hour::Int,
-                           bbox::Union{Nothing, Tuple{Float64,Float64,Float64,Float64}}=nothing)
+function get_velocity_grid(date::Date, depth_val::Float64, forecast_idx::Int)
+    # Проверяем кэш
+    cache_key = (date, depth_val, forecast_idx)
+    if haskey(VELOCITY_CACHE, cache_key)
+        println("♻️  Используем кэшированную сетку")
+        return VELOCITY_CACHE[cache_key]
+    end
+    
     conn = get_connection()
+    
     try
-        # 1. Определяем область запроса
-        bbox_geom = if bbox !== nothing
-            "ST_MakeEnvelope($(bbox[1]), $(bbox[2]), $(bbox[3]), $(bbox[4]), 4326)"
-        else
-            "ST_MakeEnvelope(-180, -90, 180, 90, 4326)"  # Весь мир
-        end
-
-        # 2. Индекс во временном массиве (0,1,...,10)
-        forecast_idx = forecast_hour ÷ 24
-
-        # 3. ОСНОВНОЙ POSTGIS-ЗАПРОС (использует пространственный индекс)
+        # Имя секции
+        partition_schema = Dates.format(date, "yyyy-mm-dd")
+        table_name = "_nemo_$(partition_schema)"
+        
+        println("🔍 Загрузка всей сетки: $partition_schema, глубина=$depth_val, время=$forecast_idx")
+        
+        # ПРОСТЕЙШИЙ ЗАПРОС - ВСЕ точки секции
         query = """
-        SELECT lon, lat,
-               (par->\$3->>'u')::float as u,
-               (par->\$3->>'v')::float as v
-        FROM _nemo
+        SELECT 
+            ST_X(geom) as lon,
+            ST_Y(geom) as lat,
+            par
+        FROM "$(partition_schema)"."$(table_name)"
         WHERE dat = \$1
-          AND ST_Within(geom, $bbox_geom)
-          AND (par->0->>'depth')::float BETWEEN \$2 - 5 AND \$2 + 5
-          AND jsonb_array_length(par) > \$3
-        ORDER BY lat DESC, lon ASC
         """
-
-        result = LibPQ.execute(conn, query, [date, depth_val, forecast_idx])
-
+        
+        result = LibPQ.execute(conn, query, [date])
+        
         if isempty(result)
-            @warn "Нет данных скорости" date depth_val forecast_idx
+            @warn "⚠️ Нет данных в секции" date
             return nothing
         end
-
-        # 4. Преобразуем в массивы
-        lons = Float64[r.lon for r in result]
-        lats = Float64[r.lat for r in result]
-        u = Float64[r.u for r in result]
-        v = Float64[r.v for r in result]
-
-        return (lons=lons, lats=lats, u=u, v=v, count=length(lons))
-
+        
+        # Обработка в памяти
+        lons = Float64[]
+        lats = Float64[]
+        u_vals = Float64[]
+        v_vals = Float64[]
+        
+        processed = 0
+        skipped_depth = 0
+        skipped_time = 0
+        
+        for row in result
+            parsed_data = JSON3.read(row.par)
+            
+            if length(parsed_data) > 0
+                first_horizon = parsed_data[1]  # Первый горизонт глубин
+                
+                # Проверяем наличие нужных полей
+                if haskey(first_horizon, "depth") &&
+                   haskey(first_horizon, "u") && 
+                   haskey(first_horizon, "v")
+                    
+                    depth = first_horizon["depth"]
+                    
+                    # Фильтр глубины ±5 метров
+                    if abs(depth - depth_val) <= 5.0
+                        u_array = first_horizon["u"]
+                        v_array = first_horizon["v"]
+                        
+                        # Проверяем индекс времени
+                        if forecast_idx <= length(u_array)
+                            push!(lons, row.lon)
+                            push!(lats, row.lat)
+                            push!(u_vals, u_array[forecast_idx])
+                            push!(v_vals, v_array[forecast_idx])
+                            processed += 1
+                        else
+                            skipped_time += 1
+                        end
+                    else
+                        skipped_depth += 1
+                    end
+                end
+            end
+        end
+        
+        # Создаем структуру данных
+        grid_data = (
+            lons=lons,
+            lats=lats, 
+            u=u_vals,
+            v=v_vals,
+            count=length(lons),
+            metadata=Dict(
+                "date" => string(date),
+                "depth_requested" => depth_val,
+                "forecast_idx" => forecast_idx,
+                "total_points" => length(result),
+                "processed" => processed,
+                "skipped_depth" => skipped_depth,
+                "skipped_time" => skipped_time
+            )
+        )
+        
+        # Сохраняем в кэш
+        VELOCITY_CACHE[cache_key] = grid_data
+        
+        println("✅ Сетка: $(length(result)) строк → $processed точек " *
+                "(пропущено: глубина=$skipped_depth, время=$skipped_time)")
+        
+        return grid_data
+        
+    catch e
+        println("❌ Ошибка в get_velocity_grid: ", e)
+        return nothing
     finally
         close(conn)
     end
 end
 
 """
-    generate_particle_seeds(region::String, count::Int, bbox)
+    generate_particle_seeds(count::Int)
 
-Генерирует случайные точки в океане с помощью PostGIS.
+Генерирует случайные точки по ВСЕЙ сетке NEMO (весь океан).
 """
-function generate_particle_seeds(region::String, count::Int,
-                                bbox::Union{Nothing, Tuple{Float64,Float64,Float64,Float64}}=nothing)
+function generate_particle_seeds(count::Int)
     conn = get_connection()
+    
     try
-        # Используем последнюю доступную дату как маску океана
+        # Используем последнюю доступную дату
         latest_date = Date(DatabaseFunctions.get_latest_date())
-
-        bbox_clause = if bbox !== nothing
-            "AND ST_Within(geom, ST_MakeEnvelope($(bbox[1]), $(bbox[2]), $(bbox[3]), $(bbox[4]), 4326))"
-        else
-            ""
-        end
-
+        partition_schema = Dates.format(latest_date, "yyyy-mm-dd")
+        table_name = "_nemo_$(partition_schema)"
+        
+        # Случайные точки ВСЕЙ сетки
         query = """
-        WITH ocean_points AS (
-            SELECT lon, lat, geom
-            FROM _nemo
-            WHERE dat = \$1
-              AND (par->0->>'depth')::float > 0  # Только вода
-              $bbox_clause
-            GROUP BY lon, lat, geom
-        )
-        SELECT lon, lat
-        FROM ocean_points
+        SELECT 
+            ST_X(geom) as lon,
+            ST_Y(geom) as lat
+        FROM "$(partition_schema)"."$(table_name)"
+        WHERE dat = \$1
+          AND (par->0->>'depth')::float > 0  # Только вода
         ORDER BY RANDOM()
         LIMIT \$2
         """
-
+        
         result = LibPQ.execute(conn, query, [latest_date, count])
-
-        return [(lon=row.lon, lat=row.lat) for row in result]
-
+        
+        particles = [(lon=row.lon, lat=row.lat) for row in result]
+        println("🎯 Сгенерировано $(length(particles)) частиц по всему океану")
+        
+        return particles
+        
+    catch e
+        println("❌ Ошибка в generate_particle_seeds: ", e)
+        return []
     finally
         close(conn)
     end
@@ -112,6 +180,16 @@ function parse_depth_string(depth_str::String)
     else
         return parse(Float64, depth_str)
     end
+end
+
+"""
+    clear_cache()
+
+Очищает кэш сеток (полезно при смене даты).
+"""
+function clear_cache()
+    empty!(VELOCITY_CACHE)
+    println("🧹 Кэш сеток очищен")
 end
 
 end # module ParticleEngine
