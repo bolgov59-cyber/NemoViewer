@@ -129,7 +129,6 @@ function get_velocity_grid(date::Date, depth_val::Float64, forecast_idx::Int)
 end
 
 """
-    generate_particle_seeds(count::Int)
 
 Генерирует случайные точки по ВСЕЙ сетке NEMO (весь океан).
 """
