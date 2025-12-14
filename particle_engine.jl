@@ -146,19 +146,29 @@ function generate_particle_seeds(count::Int, depth_val::Float64)
         
         # 2. ОПТИМИЗИРОВАННЫЙ ЗАПРОС - TABLESAMPLE
         query = """
-        WITH sampled_data AS (
-            SELECT 
-                ST_X(geom) as lon,
-                ST_Y(geom) as lat
-            FROM "$(partition_schema)"."$(table_name)" 
-            TABLESAMPLE SYSTEM (0.5)  -- 0.5% таблицы = достаточно для 1000 частиц
-            WHERE dat = \$1
-              AND (par->0->>'depth')::float = \$2
-        )
-        SELECT lon, lat
-        FROM sampled_data
-        ORDER BY RANDOM()
-        LIMIT \$3
+WITH ocean_bbox AS (
+    -- Bounding box всего океана для этой даты/глубины
+    SELECT ST_Extent(geom) as bbox
+    FROM "$(partition_schema)"."$(table_name)"
+    WHERE dat = \$1 
+      AND (par->0->>'depth')::float = \$2
+),
+random_points AS (
+    -- Генерируем случайные точки в bounding box
+    SELECT 
+        ST_X(ST_GeneratePoints(bbox, \$3 * 2)) as lon,  -- ×2 для запаса
+        ST_Y(ST_GeneratePoints(bbox, \$3 * 2)) as lat
+    FROM ocean_bbox
+)
+-- Фильтруем только те, что попадают в реальные точки сетки
+SELECT DISTINCT ON (rp.lon, rp.lat)
+    rp.lon, rp.lat
+FROM random_points rp
+JOIN "$(partition_schema)"."$(table_name)" t 
+  ON ST_DWithin(t.geom, ST_SetSRID(ST_MakePoint(rp.lon, rp.lat), 4326), 0.1)
+WHERE t.dat = \$1 
+  AND (t.par->0->>'depth')::float = \$2
+LIMIT \$3;
         """
         
         println("🔍 Быстрая генерация частиц: TABLESAMPLE SYSTEM (0.5%)")
