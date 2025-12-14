@@ -133,7 +133,7 @@ end
 
 Генерирует случайные точки по ВСЕЙ сетке NEMO (весь океан).
 """
-function generate_particle_seeds(count::Int)
+function generate_particle_seeds(count::Int, depth_val::Float64)
     conn = get_connection()
     
     try
@@ -152,10 +152,11 @@ function generate_particle_seeds(count::Int)
             ST_Y(geom) as lat
         FROM "$(partition_schema)"."$(table_name)"
         WHERE dat = \$1
-          AND (par->0->>'depth')::float > 0  # Только вода
+          AND (par->0->>'depth')::float = \$2  -- ← ТОЧНОЕ СОВПАДЕНИЕ
         ORDER BY RANDOM()
-        LIMIT \$2
+        LIMIT \$3
         """
+        println(query)
         
         result = LibPQ.execute(conn, query, [latest_date, count])
         
@@ -178,11 +179,12 @@ end
 Преобразует "0p5" -> 0.5, "97" -> 97.0
 """
 function parse_depth_string(depth_str::String)
-    if endswith(depth_str, "p5")
-        return parse(Float64, replace(depth_str, "p" => "."))
-    else
-        return parse(Float64, depth_str)
-    end
+    depth_map = Dict(
+        "0p5" => 0.51,
+        "97" => 97.04, 
+        "1046" => 1045.85
+    )
+    return get(depth_map, depth_str, 0.51)
 end
 
 """
