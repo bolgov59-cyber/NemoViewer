@@ -137,37 +137,62 @@ function generate_particle_seeds(count::Int, depth_val::Float64)
     conn = get_connection()
     
     try
-        # Используем последнюю доступную дату
-        # Берём максимальную дату из БД
-        result = LibPQ.execute(conn, "SELECT MAX(dat) as latest_date FROM _nemo")
-        latest_date = first(result).latest_date
-#        latest_date = Date(DatabaseFunctions.get_latest_date())
+        # 1. Получаем дату
+        date_result = LibPQ.execute(conn, "SELECT MAX(dat) as latest_date FROM _nemo")
+        latest_date = first(date_result).latest_date
+        
         partition_schema = Dates.format(latest_date, "yyyy-mm-dd")
         table_name = "_nemo_$(partition_schema)"
         
-        # Случайные точки ВСЕЙ сетки
+        # 2. ОПТИМИЗИРОВАННЫЙ ЗАПРОС - TABLESAMPLE
         query = """
-        SELECT 
-            ST_X(geom) as lon,
-            ST_Y(geom) as lat
-        FROM "$(partition_schema)"."$(table_name)"
-        WHERE dat = \$1
-          AND (par->0->>'depth')::float = \$2  -- ← ТОЧНОЕ СОВПАДЕНИЕ
+        WITH sampled_data AS (
+            SELECT 
+                ST_X(geom) as lon,
+                ST_Y(geom) as lat
+            FROM "$(partition_schema)"."$(table_name)" 
+            TABLESAMPLE SYSTEM (0.5)  -- 0.5% таблицы = достаточно для 1000 частиц
+            WHERE dat = \$1
+              AND (par->0->>'depth')::float = \$2
+        )
+        SELECT lon, lat
+        FROM sampled_data
         ORDER BY RANDOM()
         LIMIT \$3
         """
-        println(query)
         
-        result = LibPQ.execute(conn, query, [latest_date, count])
+        println("🔍 Быстрая генерация частиц: TABLESAMPLE SYSTEM (0.5%)")
+        
+        result = LibPQ.execute(conn, query, [latest_date, depth_val, count])
         
         particles = [(lon=row.lon, lat=row.lat) for row in result]
-        println("🎯 Сгенерировано $(length(particles)) частиц по всему океану")
+        
+        # 3. Если мало точек — делаем полный запрос (редкий случай)
+        if length(particles) < count * 0.8  # Меньше 80%
+            println("⚠️  TABLESAMPLE дал мало точек, делаем полный запрос")
+            query_full = """
+            SELECT 
+                ST_X(geom) as lon,
+                ST_Y(geom) as lat
+            FROM "$(partition_schema)"."$(table_name)"
+            WHERE dat = \$1
+              AND (par->0->>'depth')::float = \$2
+            ORDER BY RANDOM()
+            LIMIT \$3
+            """
+            result = LibPQ.execute(conn, query_full, [latest_date, depth_val, count])
+            particles = [(lon=row.lon, lat=row.lat) for row in result]
+        end
+        
+        println("✅ Сгенерировано $(length(particles)) частиц за миллисекунды")
         
         return particles
         
     catch e
         println("❌ Ошибка в generate_particle_seeds: ", e)
-        return []
+        # Fallback: случайные координаты в океане
+        println("🔄 Fallback: случайные координаты океана")
+        return [(lon=-180 + 360*rand(), lat=-90 + 180*rand()) for _ in 1:count]
     finally
         close(conn)
     end
