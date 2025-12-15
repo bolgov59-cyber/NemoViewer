@@ -4,7 +4,7 @@ using Plots
 using Base64: base64encode
 using Main: LATEST_DATE, APP_CONFIG
 using ..DatabaseFunctions: find_nearest_point, extract_forecast_data, get_climatology_profiles
-using ..ParticleEngine: get_velocity_field, generate_particle_seeds, parse_depth_string
+using ..ParticleEngine: generate_particle_seeds, parse_depth_string
 using LibPQ
 import Genie.Requests: rawpayload
 using Dates
@@ -336,7 +336,6 @@ end
 # ================== API ДЛЯ АНИМАЦИИ ЧАСТИЦ ==================
 
 # Импорт модуля частиц (добавить в начало файла с другими импортами)
-# using ..ParticleEngine: get_velocity_field, generate_particle_seeds, parse_depth_string
 
 route("/api/particles/velocity-field", method=POST) do
     try
@@ -387,13 +386,15 @@ route("/api/particles/generate-seeds", method=POST) do
     try
         data = JSON.parse(rawpayload())
         count = get(data, "count", 1000)
-        
-        particles = ParticleEngine.generate_particle_seeds(count)
+        depth_str = get(data, "depth", "0p5")
+        depth_val = ParticleEngine.parse_depth_string(depth_str)
+        particles = ParticleEngine.generate_particle_seeds(count, depth_val)
         
         return Json.json(Dict(
             "success" => true,
             "particles" => particles,
-            "count" => length(particles)
+            "count" => length(particles),
+            "depth" => depth_val
         ))
         
     catch e
