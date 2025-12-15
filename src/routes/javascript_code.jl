@@ -17,78 +17,7 @@ function loadMap() {
     let filename;
     
     if (parametersWithoutDepth.includes(parameter)) {
-        filename = region + '_' +# src/routes/javascript_code.jl
-module JavaScriptCode
-
-# Основные функции загрузки карт
-const MAP_FUNCTIONS = """
-// ================== ОСНОВНЫЕ ФУНКЦИИ ==================
-function loadMap() {
-    const date = document.getElementById('dateSelect').value;
-    const region = document.getElementById('regionSelect').value;
-    const parameter = document.getElementById('parameterSelect').value;
-    const depth = document.getElementById('depthSelect').value;
-    const forecast = document.getElementById('forecastSelect').value;
-    
-    const forecastStr = String(forecast).padStart(3, '0');
-    
-    const parametersWithoutDepth = ['ice', 'mld', 'ssh'];
-    let filename;
-    
-    if (parametersWithoutDepth.includes(parameter)) {
         filename = region + '_' + parameter + '_' + forecastStr + '.png';
-    } else {
-        filename = region + '_' + parameter + depth + '_' + forecastStr + '.png';
-    }
-    
-    document.getElementById('currentMap').src = '/static/maps/' + date + '/' + filename;
-}
-
-function loadAnimation() {
-    const date = document.getElementById('dateSelect').value;
-    const region = document.getElementById('regionSelect').value;
-    const parameter = document.getElementById('parameterSelect').value;
-    const depth = document.getElementById('depthSelect').value;
-    
-    const parametersWithoutDepth = ['ice', 'mld', 'ssh'];
-    let filename;
-    
-    if (parametersWithoutDepth.includes(parameter)) {
-        filename = region + '_' + parameter + '_anim.gif';
-    } else {
-        filename = region + '_' + parameter + depth + '_anim.gif';
-    }
-    
-    document.getElementById('currentMap').src = '/static/maps/' + date + '/' + filename;
-}
-"""
-
-# Функции модальных окон
-const MODAL_FUNCTIONS = """
-// ================== МОДАЛЬНОЕ ОКНО КАРТЫ ==================
-function openModal() {
-
-    document.getElementById('mapModal').style.display = 'block';
-    document.getElementById('modalImg').src = document.getElementById('currentMap').src;
-    initSectionCanvas(); // Инициализируем canvas при открытии модального окна
-}
-
-function closeModal() {
-    document.getElementById('mapModal').style.display = 'none';
-    clearSectionCanvas(); // Очищаем canvas при закрытии
-}
-
-function closeGraphModal() {
-    document.getElementById('graphModal').style.display = 'none';
-}
-"""
-
-# Конфигурация проекций и преобразование координат
-const COORDINATE_FUNCTIONS = """
-// ================== КОНФИГУРАЦИЯ ПРОЕКЦИЙ И ГРАНИЦ ==================
-const mapLeftM = 52;
-const mapTopM = 48;
- parameter + '_' + forecastStr + '.png';
     } else {
         filename = region + '_' + parameter + depth + '_' + forecastStr + '.png';
     }
@@ -939,7 +868,7 @@ async function loadAndShowParticles() {
         const depth = document.getElementById('depthSelect').value;
         const date = document.getElementById('dateSelect').value;
         const forecast = document.getElementById('forecastSelect').value;
-        const count = document.getElementById('particleCountSlider').value;  // ← ЭТОТ элемент должен существовать!
+        const count = document.getElementById('particleCountSlider').value;
         
         // 1. Запрашиваем поле скоростей
         const velocityResponse = await fetch('/api/particles/velocity-field', {
@@ -953,12 +882,17 @@ async function loadAndShowParticles() {
             })
         });
         
-        if (!velocityResponse.ok) {
-            throw new Error(`Ошибка скорости: ' + velocityResponse.status`);
+        // Проверяем ответ
+        if (!velocityResponse || !velocityResponse.ok) {
+            throw new Error('Ошибка запроса скорости: ' + (velocityResponse ? velocityResponse.status : 'нет ответа'));
         }
         
         const velocityData = await velocityResponse.json();
         console.log("✅ Данные скорости:", velocityData);
+        
+        if (!velocityData.success) {
+            throw new Error(velocityData.error || 'Неизвестная ошибка данных скорости');
+        }
         
         // 2. Запрашиваем частицы
         const particlesResponse = await fetch('/api/particles/generate-seeds', {
@@ -966,19 +900,37 @@ async function loadAndShowParticles() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 count: parseInt(count),
-                region: region
+                region: region,
+                depth: depth
             })
         });
         
-        const particlesData = await particlesResponse.json();
-        console.log("✅ Сгенерировано частиц:", particlesData.count);
+        if (!particlesResponse || !particlesResponse.ok) {
+            throw new Error('Ошибка запроса частиц: ' + (particlesResponse ? particlesResponse.status : 'нет ответа'));
+        }
         
-        // 3. Инициализируем/обновляем систему частиц
+        const particlesData = await particlesResponse.json();
+        console.log("✅ Данные частиц:", particlesData);
+        
+        if (!particlesData.success) {
+            throw new Error(particlesData.error || 'Неизвестная ошибка генерации частиц');
+        }
+        
+        // 3. Проверяем формат данных частиц
+        const seedParticles = particlesData.particles;
+        if (!seedParticles || !Array.isArray(seedParticles)) {
+            console.error("❌ Неверный формат частиц:", particlesData);
+            throw new Error('Неправильный формат данных частиц. Ожидается массив particles.');
+        }
+        
+        console.log("✅ Сгенерировано частиц:", seedParticles.length);
+        
+        // 4. Инициализируем/обновляем систему частиц
         if (!particleSystem) {
             particleSystem = new SimpleParticleSystem('particleCanvas');
         }
         
-        particleSystem.initialize(velocityData.data, particlesData.particles);
+        particleSystem.initialize(velocityData.data, seedParticles);
         particleSystem.start();
         
     } catch (error) {
@@ -1036,25 +988,20 @@ class SimpleParticleSystem {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
     
-    animate() {
-        // Очистка (полупрозрачная для эффекта шлейфа)
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Обновление и отрисовка частиц
-        this.updateParticles();
-        this.drawParticles();
-        
-        this.animationId = requestAnimationFrame(() => this.animate());
-    }
+        animate() {
+            // Для эффекта плавного исчезновения следов:
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // ОЧЕНЬ прозрачный
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     
-    updateParticles() {
-        // Простое движение (заглушка - нужна реальная интерполяция)
-        for (const p of this.particles) {
-            p.x += (Math.random() - 0.5) * 0.1;
-            p.y += (Math.random() - 0.5) * 0.1;
+            // Или вообще без фона:
+            // this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+            this.updateParticles();
+            this.drawParticles();
+    
+            this.animationId = requestAnimationFrame(() => this.animate());
         }
-    }
+}
     
     drawParticles() {
         for (const p of this.particles) {
