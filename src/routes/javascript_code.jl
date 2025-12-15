@@ -17,7 +17,78 @@ function loadMap() {
     let filename;
     
     if (parametersWithoutDepth.includes(parameter)) {
+        filename = region + '_' +# src/routes/javascript_code.jl
+module JavaScriptCode
+
+# Основные функции загрузки карт
+const MAP_FUNCTIONS = """
+// ================== ОСНОВНЫЕ ФУНКЦИИ ==================
+function loadMap() {
+    const date = document.getElementById('dateSelect').value;
+    const region = document.getElementById('regionSelect').value;
+    const parameter = document.getElementById('parameterSelect').value;
+    const depth = document.getElementById('depthSelect').value;
+    const forecast = document.getElementById('forecastSelect').value;
+    
+    const forecastStr = String(forecast).padStart(3, '0');
+    
+    const parametersWithoutDepth = ['ice', 'mld', 'ssh'];
+    let filename;
+    
+    if (parametersWithoutDepth.includes(parameter)) {
         filename = region + '_' + parameter + '_' + forecastStr + '.png';
+    } else {
+        filename = region + '_' + parameter + depth + '_' + forecastStr + '.png';
+    }
+    
+    document.getElementById('currentMap').src = '/static/maps/' + date + '/' + filename;
+}
+
+function loadAnimation() {
+    const date = document.getElementById('dateSelect').value;
+    const region = document.getElementById('regionSelect').value;
+    const parameter = document.getElementById('parameterSelect').value;
+    const depth = document.getElementById('depthSelect').value;
+    
+    const parametersWithoutDepth = ['ice', 'mld', 'ssh'];
+    let filename;
+    
+    if (parametersWithoutDepth.includes(parameter)) {
+        filename = region + '_' + parameter + '_anim.gif';
+    } else {
+        filename = region + '_' + parameter + depth + '_anim.gif';
+    }
+    
+    document.getElementById('currentMap').src = '/static/maps/' + date + '/' + filename;
+}
+"""
+
+# Функции модальных окон
+const MODAL_FUNCTIONS = """
+// ================== МОДАЛЬНОЕ ОКНО КАРТЫ ==================
+function openModal() {
+
+    document.getElementById('mapModal').style.display = 'block';
+    document.getElementById('modalImg').src = document.getElementById('currentMap').src;
+    initSectionCanvas(); // Инициализируем canvas при открытии модального окна
+}
+
+function closeModal() {
+    document.getElementById('mapModal').style.display = 'none';
+    clearSectionCanvas(); // Очищаем canvas при закрытии
+}
+
+function closeGraphModal() {
+    document.getElementById('graphModal').style.display = 'none';
+}
+"""
+
+# Конфигурация проекций и преобразование координат
+const COORDINATE_FUNCTIONS = """
+// ================== КОНФИГУРАЦИЯ ПРОЕКЦИЙ И ГРАНИЦ ==================
+const mapLeftM = 52;
+const mapTopM = 48;
+ parameter + '_' + forecastStr + '.png';
     } else {
         filename = region + '_' + parameter + depth + '_' + forecastStr + '.png';
     }
