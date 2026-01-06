@@ -28,33 +28,68 @@ lat = [i for i= -77:0.25:88.75]
 Деплой	Сервер на 0.0.0.0:8000 (настроено в app.jl)
 
 📁 Структура проекта
-text
 NemoViewer/
-├── app.jl                          # Точка входа, инициализация сервера
-├── run.jl                          # Скрипт запуска приложения
-├── src/
-│   ├── config/
-│   │   └── database.jl            # Настройки подключения к БД
-│   ├── utils/
-│   │   ├── database_functions.jl  # Основные функции работы с БД
-│   │   └── particle_engine.jl     # Ядро для расчета траекторий частиц (новый)
-│   └── routes/
-│       ├── main_routes.jl         # Главный маршрут (рендеринг HTML)
-│       ├── api_routes.jl          # Все API-эндпоинты (данные, графики, частицы)
-│       ├── javascript_code.jl     # Весь клиентский JavaScript (генерируемый)
-│       ├── html_templates.jl      # HTML-шаблоны страницы
-│       └── css_styles.jl          # Стили (CSS в виде строк Julia)
-├── public/static/
-│   |       | └── js/
-│   |       |  └── particle-system/
-│   |       |    └── core.js 
-|   |       └── maps/                      # Предварительно сгенерированные статические карты
-│   │          └── [дата]/
-│   │          ├── wo_Tz0p5_000.png
-│   │          └── ... (png, gif)
-│   ├── js/                        # (Планируется) Отдельные JS-файлы (particles.js)
-│   └── color_schemes.jl           # Цветовые палитры для графиков
-└── (README.md)                    # Этот файл
+├── 📁 **BACKEND (Julia/Genie.jl)**
+│   ├── 📄 app.jl
+│   │   ├── Конфигурация сервера и статики
+│   │   ├── Порядок загрузки модулей: particle_engine.jl → api_routes.jl → main_routes.jl
+│   │   └── Запуск сервера на 0.0.0.0:8000
+│   │
+│   ├── 📁 src/routes/
+│   │   ├── 📄 **api_routes.jl** (НОВЫЕ ЭНДПОИНТЫ) ⭐
+│   │   │   ├── POST /api/particles/spawn-points → ParticleEngine.generate_particle_seeds()
+│   │   │   ├── POST /api/particles/batch-velocities → ParticleEngine.get_batch_velocities()
+│   │   │   ├── GET /api/particles/ping (тест)
+│   │   │   └── 🗑️ УДАЛЕНО: старые /trajectories, /streamlines
+│   │   │
+│   │   ├── 📄 **main_routes.jl** (СТАРАЯ РАБОЧАЯ ЧАСТЬ)
+│   │   │   └── Главная страница и старые API: /api/point_data, /api/plot_depth, /api/section_plot
+│   │   │
+│   │   └── 📄 **html_templates.jl**
+│   │       ├── Шаблон страницы с подстановкой %JAVASCRIPT_CODE%
+│   │       ├── Canvas для частиц (<canvas id="particleCanvas">)
+│   │       └── Управление анимацией
+│   │
+│   ├── 📁 src/utils/
+│   │   ├── 📄 **particle_engine.jl** (НОВОЕ ЯДРО) ⭐
+│   │   │   ├── get_batch_velocities() → Batch-запрос 4 ближайших узлов для массива точек
+│   │   │   ├── generate_particle_seeds() → Случайные точки в регионе
+│   │   │   ├── validate_particle_input() → Валидация
+│   │   │   └── 🔧 Использует get_connection() из database_functions.jl
+│   │   │
+│   │   ├── 📄 **database_functions.jl** (СТАРАЯ РАБОЧАЯ ЧАСТЬ)
+│   │   │   └── Функции работы с БД (get_connection и др.)
+│   │   │
+│   │   └── 📄 **particle_tracer.jl** (РУДИМЕНТ 🗑️)
+│   │       └── Старая логика долгих траекторий (240 часов) — НЕ ИСПОЛЬЗУЕТСЯ
+│   │
+│   └── 📁 src/config/
+│       └── database.jl → Настройки подключения к PostgreSQL
+│
+├── 📁 **FRONTEND (HTML/CSS/JavaScript)**
+│   ├── 📁 public/static/
+│   │   ├── 📁 js/particle-system/
+│   │   │   └── 📄 **core.js** (ОСНОВА ДЛЯ Windy-style) ⭐
+│   │   │       ├── Класс ParticleSystem
+│   │   │       ├── Запросы к /api/particles/spawn-points и /api/particles/batch-velocities
+│   │   │       └── Отрисовка частиц на Canvas
+│   │   │
+│   │   └── 📁 maps/ → Предварительно сгенерированные карты
+│   │
+│   └── 📄 **javascript_code.jl** (ГЕНЕРАТОР ВСЕГО JS)
+│       ├── Все функции для карт, профилей, разрезов (работает)
+│       ├── loadAndShowParticles() → Запуск новой системы частиц ⭐
+│       └── 🗑️ УДАЛЕНО: старая система частиц (ParticleSystem класс)
+│
+├── 📁 **DATA (PostgreSQL/PostGIS)**
+│   ├── Таблица _nemo, партиционированная по датам
+│   ├── Поле par (JSONB) с массивами параметров по глубинам
+│   └── Пространственные индексы для быстрого поиска ближайших узлов
+│
+└── 📄 run.jl → Точка входа (запуск сервера)
+
+<img width="5478" height="3026" alt="deepseek_mermaid_20260106_40879a" src="https://github.com/user-attachments/assets/92f4079c-1226-4d34-91ca-033276304665" />
+
 
 🔧 Установка и запуск
 Предварительные требования:
